@@ -1,12 +1,14 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { MatTabsModule } from '@angular/material/tabs';
 import { WellSelectorComponent } from './features/well-selector/well-selector.component';
 import { BlasingameComponent } from './features/blasingame/blasingame.component';
+import { DiagnosticPlotsComponent } from './features/diagnostic-plots/diagnostic-plots.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, WellSelectorComponent, BlasingameComponent],
+  imports: [CommonModule, MatTabsModule, WellSelectorComponent, BlasingameComponent, DiagnosticPlotsComponent],
   template: `
     <div class="app-container">
       <header class="app-header">
@@ -20,7 +22,27 @@ import { BlasingameComponent } from './features/blasingame/blasingame.component'
         </div>
 
         <div class="analysis-section">
-          <app-blasingame></app-blasingame>
+          <mat-tab-group class="analysis-tabs" dynamicHeight>
+            <mat-tab label="Blasingame Type Curves">
+              <ng-template mat-tab-label>
+                <span class="tab-icon">📊</span>
+                Blasingame Type Curves
+              </ng-template>
+              <div class="tab-content">
+                <app-blasingame></app-blasingame>
+              </div>
+            </mat-tab>
+
+            <mat-tab label="Diagnostic Plots">
+              <ng-template mat-tab-label>
+                <span class="tab-icon">📈</span>
+                Diagnostic Plots
+              </ng-template>
+              <div class="tab-content">
+                <app-diagnostic-plots></app-diagnostic-plots>
+              </div>
+            </mat-tab>
+          </mat-tab-group>
         </div>
       </div>
     </div>
@@ -53,6 +75,8 @@ import { BlasingameComponent } from './features/blasingame/blasingame.component'
 
     .app-content {
       padding: 20px;
+      max-width: 1600px;
+      margin: 0 auto;
     }
 
     .well-selector-section {
@@ -63,6 +87,27 @@ import { BlasingameComponent } from './features/blasingame/blasingame.component'
       background: white;
       border-radius: 4px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+
+    .analysis-tabs ::ng-deep {
+      .mdc-tab {
+        min-width: 200px;
+      }
+
+      .mdc-tab__content {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    }
+
+    .tab-icon {
+      font-size: 16px;
+    }
+
+    .tab-content {
+      padding: 20px;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
