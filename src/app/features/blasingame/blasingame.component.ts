@@ -4,9 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { AppStateService } from '../../services/app-state.service';
 import { BlasingameCalculationService } from '../../services/blasingame-calculation.service';
 import { PlotlyChartComponent } from '../../shared/components/plotly-chart/plotly-chart.component';
+import { TypeCurveMatcherComponent } from './type-curve-matcher/type-curve-matcher.component';
 import { ChartConfig, RTA_CHART_PRESETS } from '../../models/chart-config.model';
 import { BlasingameInput, BlasingameOutput } from '../../models/blasingame.model';
 import { signal, effect } from '@angular/core';
@@ -28,7 +30,9 @@ import { map } from 'rxjs/operators';
     MatButtonModule,
     MatCheckboxModule,
     MatProgressSpinnerModule,
-    PlotlyChartComponent
+    MatExpansionModule,
+    PlotlyChartComponent,
+    TypeCurveMatcherComponent
   ],
   template: `
     <div class="blasingame-container">
@@ -65,6 +69,21 @@ import { map } from 'rxjs/operators';
 
       @if (errorMessage$ | async; as error) {
         <div class="error-message">{{ error }}</div>
+      }
+
+      <!-- Type Curve Matching Section -->
+      @if (blasingameOutput(); as output) {
+        <mat-expansion-panel class="matcher-panel">
+          <mat-expansion-panel-header>
+            <mat-panel-title>
+              🎯 Type Curve Matching (Manual)
+            </mat-panel-title>
+            <mat-panel-description>
+              Adjust parameters to match theoretical type curves
+            </mat-panel-description>
+          </mat-expansion-panel-header>
+          <app-type-curve-matcher [blasingameOutput]="output" />
+        </mat-expansion-panel>
       }
     </div>
   `,
@@ -125,6 +144,20 @@ import { map } from 'rxjs/operators';
       color: #c62828;
       border-radius: 4px;
       border: 1px solid #ef5350;
+    }
+
+    .matcher-panel {
+      margin-top: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    mat-panel-title {
+      font-weight: 500;
+    }
+
+    mat-panel-description {
+      font-size: 12px;
+      color: #999;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
