@@ -86,7 +86,7 @@ src/app/
 | Feature | Priority | Notes |
 |---|---|---|
 | **Data import (CSV)** | High | ✅ Step 1.1 done — drag-drop upload, preview table, well metadata form, localStorage persistence |
-| **Data import (Excel upload)** | High | Step 1.2 pending |
+| **Data import (Excel upload)** | High | ✅ Step 1.2 done — SheetJS, sheet selector, auto-detect + manual column mapper |
 | **HTTP data provider** | High | Skeleton exists, endpoints not wired |
 | **Automatic type curve matching** | High | Manual sliders only; no optimisation algorithm |
 | **Agarwal-Gardner analysis** | High | Not started |
@@ -126,11 +126,12 @@ Each phase below is a self-contained milestone. Complete one phase before moving
 - [x] Feed imported data into `AppStateService.loadImportedData()` (bypasses mock provider)
 - [x] Show blocking errors and non-blocking warnings with clear messages
 
-#### Step 1.2 — Excel File Upload
-- [ ] Add `xlsx` (SheetJS) library
-- [ ] Support `.xlsx` and `.xls` formats
-- [ ] Allow user to select which sheet and which columns map to which fields (column mapper UI)
-- [ ] Reuse validation and preview from Step 1.1
+#### Step 1.2 — Excel File Upload ✅ Complete
+- [x] Add `xlsx` (SheetJS 0.18) library
+- [x] Support `.xlsx` and `.xls` formats
+- [x] Sheet selector (shown only when workbook has more than 1 sheet)
+- [x] `ColumnMapperComponent` — auto-detects columns by header name; manual dropdowns override
+- [x] Reuses same validation and preview pipeline as Step 1.1
 
 #### Step 1.3 — Data Management UI ✅ Complete
 - [x] Display currently loaded dataset (well name, source file, date range, record count) via `DataManagementPanelComponent`

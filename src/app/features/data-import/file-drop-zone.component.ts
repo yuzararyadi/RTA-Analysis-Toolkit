@@ -27,7 +27,7 @@ import { MatIconModule } from '@angular/material/icon';
         <mat-icon class="drop-icon">upload_file</mat-icon>
         <p class="drop-primary">Drag & drop your file here</p>
         <p class="drop-secondary">or click to browse</p>
-        <p class="drop-hint">Accepted: {{ accept }}</p>
+        <p class="drop-hint">Accepted: CSV, Excel (.xlsx, .xls)</p>
       } @else {
         <mat-icon class="drop-icon success">check_circle</mat-icon>
         <p class="drop-primary">{{ selectedFile()!.name }}</p>

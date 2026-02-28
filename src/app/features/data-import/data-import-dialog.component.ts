@@ -1,10 +1,10 @@
 import {
-  Component, ChangeDetectionStrategy, signal, computed, inject
+  Component, ChangeDetectionStrategy, signal, computed, inject, ViewChild
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
-import { MatStepperModule } from '@angular/material/stepper';
+import { MatStepper, MatStepperModule } from '@angular/material/stepper';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -15,8 +15,14 @@ import { MatDividerModule } from '@angular/material/divider';
 
 import { FileDropZoneComponent } from './file-drop-zone.component';
 import { ImportPreviewTableComponent } from './import-preview-table.component';
+import { ColumnMapperComponent } from './column-mapper.component';
 import { DataImportService } from '../../services/data-import.service';
-import { ImportValidationResult, ImportedDataset, WellImportMetadata } from '../../models/import.model';
+import {
+  ImportValidationResult, ImportedDataset, WellImportMetadata,
+  ExcelColumnMapping, ExcelWorkbookInfo,
+} from '../../models/import.model';
+
+type FileType = 'csv' | 'excel' | null;
 
 @Component({
   selector: 'app-data-import-dialog',
@@ -36,34 +42,44 @@ import { ImportValidationResult, ImportedDataset, WellImportMetadata } from '../
     MatDividerModule,
     FileDropZoneComponent,
     ImportPreviewTableComponent,
+    ColumnMapperComponent,
   ],
   template: `
     <h2 mat-dialog-title>Import Production Data</h2>
 
     <mat-dialog-content>
-      <mat-stepper linear #stepper>
+      <mat-stepper [linear]="false" #stepper>
 
-        <!-- Step 1: File Upload + Well Metadata -->
-        <mat-step [completed]="step1Complete()" label="Upload File & Well Details">
+        <!-- ── Step 1: File Upload + Well Metadata ── -->
+        <mat-step label="Upload & Well Details">
           <div class="step-content">
 
             <app-file-drop-zone
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               (fileSelected)="onFileSelected($event)">
             </app-file-drop-zone>
 
             @if (parsing()) {
               <mat-progress-bar mode="indeterminate" style="margin-top:12px"></mat-progress-bar>
-              <p class="parsing-note">Parsing file…</p>
+              <p class="parsing-note">Reading file…</p>
             }
 
-            @if (parseResult()) {
+            @if (fileType() === 'csv' && parseResult()) {
               <div class="parse-status" [class.has-errors]="!parseResult()!.isValid">
                 <mat-icon>{{ parseResult()!.isValid ? 'check_circle' : 'error' }}</mat-icon>
                 <span>
                   {{ parseResult()!.isValid
-                    ? parseResult()!.rows.length + ' rows parsed successfully'
-                    : parseResult()!.errors[0].message }}
+                    ? parseResult()!.rows.length + ' rows detected'
+                    : parseResult()!.errors[0]?.message }}
+                </span>
+              </div>
+            }
+
+            @if (fileType() === 'excel' && excelInfo()) {
+              <div class="parse-status">
+                <mat-icon>table_chart</mat-icon>
+                <span>
+                  Excel file loaded — {{ excelInfo()!.sheets.length }} sheet(s). Map columns in the next step.
                 </span>
               </div>
             }
@@ -118,16 +134,60 @@ import { ImportValidationResult, ImportedDataset, WellImportMetadata } from '../
             <button mat-button mat-dialog-close>Cancel</button>
             <button
               mat-flat-button color="primary"
-              matStepperNext
-              [disabled]="!step1Complete()">
-              Next: Preview
+              [disabled]="!step1Complete()"
+              (click)="onStep1Next()">
+              {{ fileType() === 'excel' ? 'Next: Map Columns' : 'Next: Preview' }}
+              <mat-icon iconPositionEnd>arrow_forward</mat-icon>
             </button>
           </div>
         </mat-step>
 
-        <!-- Step 2: Preview + Confirm -->
+        <!-- ── Step 2: Column Mapping (Excel only) ── -->
+        <mat-step label="Map Columns">
+          <div class="step-content">
+            @if (fileType() === 'excel' && excelInfo()) {
+              @if (excelInfo()!.sheets.length > 1) {
+                <mat-form-field appearance="outline" style="width:100%; margin-bottom:12px">
+                  <mat-label>Sheet</mat-label>
+                  <mat-select [(ngModel)]="selectedSheetIndex" (ngModelChange)="onSheetChange($event)">
+                    @for (sheet of excelInfo()!.sheets; track $index) {
+                      <mat-option [value]="$index">{{ sheet }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              }
+
+              <app-column-mapper
+                [headers]="currentSheetHeaders()"
+                [sheetIndex]="selectedSheetIndex"
+                (mappingChange)="onMappingChange($event)">
+              </app-column-mapper>
+
+            } @else {
+              <p class="not-applicable">Column mapping is only required for Excel files.</p>
+            }
+          </div>
+
+          <div class="step-actions">
+            <button mat-button (click)="stepper.selectedIndex = 0">Back</button>
+            <button mat-button mat-dialog-close>Cancel</button>
+            <button
+              mat-flat-button color="primary"
+              [disabled]="!step2Complete()"
+              (click)="onStep2Next()">
+              Next: Preview
+              <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+            </button>
+          </div>
+        </mat-step>
+
+        <!-- ── Step 3: Preview + Confirm ── -->
         <mat-step label="Preview & Confirm">
           <div class="step-content">
+            @if (parsing()) {
+              <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+              <p class="parsing-note">Parsing Excel data…</p>
+            }
             @if (parseResult()) {
               <app-import-preview-table
                 [rows]="parseResult()!.rows"
@@ -138,7 +198,7 @@ import { ImportValidationResult, ImportedDataset, WellImportMetadata } from '../
           </div>
 
           <div class="step-actions">
-            <button mat-button matStepperPrevious>Back</button>
+            <button mat-button (click)="onBackFromPreview()">Back</button>
             <button mat-button mat-dialog-close>Cancel</button>
             <button
               mat-flat-button color="primary"
@@ -156,7 +216,7 @@ import { ImportValidationResult, ImportedDataset, WellImportMetadata } from '../
   styles: [`
     mat-dialog-content {
       min-width: 600px;
-      max-width: 820px;
+      max-width: 860px;
       padding-bottom: 0;
     }
     .step-content {
@@ -192,17 +252,25 @@ import { ImportValidationResult, ImportedDataset, WellImportMetadata } from '../
     .form-row { display: flex; gap: 16px; }
     .full-width { width: 100%; }
     .half-width { flex: 1; }
+    .not-applicable { color: #888; font-size: 14px; }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataImportDialogComponent {
+  @ViewChild('stepper') stepper!: MatStepper;
+
   private importService = inject(DataImportService);
   private dialogRef = inject(MatDialogRef<DataImportDialogComponent>);
   private fb = inject(FormBuilder);
 
   protected parsing = signal(false);
+  protected fileType = signal<FileType>(null);
   protected parseResult = signal<ImportValidationResult | null>(null);
   protected selectedFile = signal<File | null>(null);
+  protected excelInfo = signal<ExcelWorkbookInfo | null>(null);
+  protected excelBuffer = signal<ArrayBuffer | null>(null);
+  protected columnMapping = signal<ExcelColumnMapping | null>(null);
+  protected selectedSheetIndex = 0;
 
   protected wellForm = this.fb.group({
     wellName: ['', Validators.required],
@@ -212,32 +280,102 @@ export class DataImportDialogComponent {
     completionType: [null as 'vertical' | 'horizontal' | 'deviated' | null],
   });
 
-  protected step1Complete = computed(() => {
-    const result = this.parseResult();
-    const wellNameFilled = !!this.wellForm.get('wellName')?.value?.trim();
-    // Allow proceeding even with warnings, block only on errors
-    return result !== null && result.rows.length >= 2 && result.errors.length === 0 && wellNameFilled;
+  protected currentSheetHeaders = computed(() => {
+    const info = this.excelInfo();
+    if (!info) return [];
+    return info.headers[this.selectedSheetIndex] ?? [];
   });
+
+  protected step1Complete = computed(() => {
+    const type = this.fileType();
+    const wellName = !!this.wellForm.get('wellName')?.value?.trim();
+    if (!wellName || !type) return false;
+    if (type === 'csv') {
+      const r = this.parseResult();
+      return r !== null && r.errors.length === 0 && r.rows.length >= 2;
+    }
+    return this.excelInfo() !== null;
+  });
+
+  protected step2Complete = computed(() => this.columnMapping() !== null);
 
   protected canConfirm = computed(() => {
     const result = this.parseResult();
     return result !== null && result.isValid;
   });
 
+  // ── File selection ──────────────────────────────────────────────────
+
   protected onFileSelected(file: File): void {
     this.selectedFile.set(file);
     this.parseResult.set(null);
-    this.parsing.set(true);
+    this.excelInfo.set(null);
+    this.excelBuffer.set(null);
+    this.columnMapping.set(null);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const result = this.importService.parseCSV(text);
-      this.parseResult.set(result);
-      this.parsing.set(false);
-    };
-    reader.readAsText(file);
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    if (ext === 'csv') {
+      this.fileType.set('csv');
+      this.parsing.set(true);
+      const reader = new FileReader();
+      reader.onload = e => {
+        const result = this.importService.parseCSV(e.target!.result as string);
+        this.parseResult.set(result);
+        this.parsing.set(false);
+      };
+      reader.readAsText(file);
+
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      this.fileType.set('excel');
+      this.parsing.set(true);
+      const reader = new FileReader();
+      reader.onload = e => {
+        const buffer = e.target!.result as ArrayBuffer;
+        this.excelBuffer.set(buffer);
+        const info = this.importService.getExcelInfo(buffer);
+        this.excelInfo.set(info);
+        this.selectedSheetIndex = 0;
+        this.parsing.set(false);
+      };
+      reader.readAsArrayBuffer(file);
+    }
   }
+
+  // ── Step navigation ─────────────────────────────────────────────────
+
+  protected onStep1Next(): void {
+    // CSV skips column mapping — jump straight to step 3 (index 2)
+    this.stepper.selectedIndex = this.fileType() === 'csv' ? 2 : 1;
+  }
+
+  protected onSheetChange(index: number): void {
+    this.selectedSheetIndex = index;
+    this.columnMapping.set(null);
+  }
+
+  protected onMappingChange(mapping: ExcelColumnMapping | null): void {
+    this.columnMapping.set(mapping);
+  }
+
+  protected onStep2Next(): void {
+    const mapping = this.columnMapping();
+    const buffer = this.excelBuffer();
+    if (!mapping || !buffer) return;
+
+    this.parsing.set(true);
+    this.parseResult.set(null);
+    const result = this.importService.parseExcel(buffer, mapping);
+    this.parseResult.set(result);
+    this.parsing.set(false);
+    this.stepper.selectedIndex = 2;
+  }
+
+  protected onBackFromPreview(): void {
+    this.stepper.selectedIndex = this.fileType() === 'csv' ? 0 : 1;
+  }
+
+  // ── Confirm ──────────────────────────────────────────────────────────
 
   protected onConfirm(): void {
     const result = this.parseResult();

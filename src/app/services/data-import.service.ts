@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import * as XLSX from 'xlsx';
 import {
   ParsedImportRow,
   ImportValidationResult,
@@ -6,6 +7,8 @@ import {
   ImportWarning,
   ImportedDataset,
   WellImportMetadata,
+  ExcelColumnMapping,
+  ExcelWorkbookInfo,
 } from '../models/import.model';
 import { Well } from '../models/well.model';
 import { ProductionData } from '../models/production-data.model';
@@ -203,6 +206,105 @@ export class DataImportService {
     return { well, productionData, importedAt: new Date(), sourceFileName: fileName };
   }
 
+  // ===== Excel =====
+
+  /**
+   * Read an Excel ArrayBuffer and return sheet names + per-sheet headers.
+   * Call this immediately after the user drops an Excel file to populate
+   * the sheet selector and column mapper UI.
+   */
+  getExcelInfo(buffer: ArrayBuffer): ExcelWorkbookInfo {
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const sheets = workbook.SheetNames;
+    const headers = sheets.map(name => {
+      const ws = workbook.Sheets[name];
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
+      if (rows.length === 0) return [];
+      return (rows[0] as unknown[]).map(cell => String(cell ?? ''));
+    });
+    return { sheets, headers };
+  }
+
+  /**
+   * Parse an Excel file using the column mapping chosen by the user.
+   * Uses the same validation pipeline as parseCSV.
+   */
+  parseExcel(buffer: ArrayBuffer, mapping: ExcelColumnMapping): ImportValidationResult {
+    const errors: ImportError[] = [];
+    const warnings: ImportWarning[] = [];
+    const rows: ParsedImportRow[] = [];
+
+    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const sheetName = workbook.SheetNames[mapping.sheetIndex];
+    if (!sheetName) {
+      errors.push({ row: 0, column: 'file', message: 'Selected sheet not found in workbook.' });
+      return { isValid: false, errors, warnings, rows };
+    }
+
+    const ws = workbook.Sheets[sheetName];
+    // raw arrays: rows[0] = header row, rows[1..] = data
+    const rawRows = XLSX.utils.sheet_to_json<unknown[]>(ws, {
+      header: 1,
+      defval: '',
+      raw: false,   // convert everything to strings/dates
+    });
+
+    const dataStart = mapping.headerRowIndex + 1;
+    if (rawRows.length <= dataStart) {
+      errors.push({ row: 0, column: 'file', message: 'Sheet contains no data rows after the header.' });
+      return { isValid: false, errors, warnings, rows };
+    }
+
+    for (let i = dataStart; i < rawRows.length; i++) {
+      const rowNum = i + 1;
+      const cells = rawRows[i] as unknown[];
+
+      const dateRaw = cells[mapping.dateColIndex];
+      let parsedDate: Date;
+
+      if (dateRaw instanceof Date) {
+        parsedDate = dateRaw;
+      } else {
+        parsedDate = new Date(String(dateRaw));
+      }
+
+      if (isNaN(parsedDate.getTime())) {
+        errors.push({ row: rowNum, column: 'date', message: `Cannot parse date: "${dateRaw}"` });
+        continue;
+      }
+
+      let oilRate = this.parseRateFromCell(cells, mapping.oilRateColIndex);
+      let gasRate = this.parseRateFromCell(cells, mapping.gasRateColIndex);
+      let waterRate = this.parseRateFromCell(cells, mapping.waterRateColIndex);
+      const pressure = this.parsePressureFromCell(cells, mapping.pressureColIndex);
+
+      if (oilRate < 0) { warnings.push({ row: rowNum, message: `Negative oil rate clamped to 0.` }); oilRate = 0; }
+      if (gasRate < 0) { warnings.push({ row: rowNum, message: `Negative gas rate clamped to 0.` }); gasRate = 0; }
+      if (waterRate < 0) { warnings.push({ row: rowNum, message: `Negative water rate clamped to 0.` }); waterRate = 0; }
+
+      rows.push({ date: parsedDate, oilRate, gasRate, waterRate, pressure });
+    }
+
+    if (rows.length < 2) {
+      errors.push({ row: 0, column: 'file', message: 'At least 2 valid data rows are required.' });
+      return { isValid: false, errors, warnings, rows };
+    }
+
+    // Sort by date; warn if out of order
+    const originalFirst = rows[0].date.getTime();
+    rows.sort((a, b) => a.date.getTime() - b.date.getTime());
+    if (rows[0].date.getTime() !== originalFirst) {
+      warnings.push({ row: 0, message: 'Dates were not in chronological order. Rows have been sorted automatically.' });
+    }
+
+    const pressureCount = rows.filter(r => r.pressure !== undefined).length;
+    if (mapping.pressureColIndex !== undefined && pressureCount < rows.length * 0.5) {
+      warnings.push({ row: 0, message: `Pressure column present but ${rows.length - pressureCount} of ${rows.length} rows have no pressure value.` });
+    }
+
+    return { isValid: errors.length === 0, errors, warnings, rows };
+  }
+
   // ===== Private helpers =====
 
   private buildColumnMap(headers: string[]): Record<string, number> {
@@ -254,6 +356,22 @@ export class DataImportService {
     const raw = this.getCell(cells, index);
     if (raw === '' || raw === null) return undefined;
     const val = parseFloat(raw);
+    return isNaN(val) ? undefined : val;
+  }
+
+  private parseRateFromCell(cells: unknown[], index: number | undefined): number {
+    if (index === undefined || index >= cells.length) return 0;
+    const raw = cells[index];
+    if (raw === '' || raw === null || raw === undefined) return 0;
+    const val = parseFloat(String(raw));
+    return isNaN(val) ? 0 : val;
+  }
+
+  private parsePressureFromCell(cells: unknown[], index: number | undefined): number | undefined {
+    if (index === undefined || index >= cells.length) return undefined;
+    const raw = cells[index];
+    if (raw === '' || raw === null || raw === undefined) return undefined;
+    const val = parseFloat(String(raw));
     return isNaN(val) ? undefined : val;
   }
 }

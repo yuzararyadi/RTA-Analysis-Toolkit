@@ -57,6 +57,23 @@ export interface ImportSummary {
   dateRange: { start: Date; end: Date };
 }
 
+/** Column mapping chosen by the user when importing an Excel file */
+export interface ExcelColumnMapping {
+  sheetIndex: number;         // which sheet (0-based)
+  headerRowIndex: number;     // which row contains headers (0-based, usually 0)
+  dateColIndex: number;       // required
+  oilRateColIndex?: number;
+  gasRateColIndex?: number;
+  waterRateColIndex?: number;
+  pressureColIndex?: number;
+}
+
+/** Info extracted from an Excel workbook before column mapping */
+export interface ExcelWorkbookInfo {
+  sheets: string[];           // sheet names
+  headers: string[][];        // headers[sheetIndex] = string[]
+}
+
 /** Schema stored in localStorage — version field guards against schema changes */
 export interface PersistedImport {
   version: 1;
