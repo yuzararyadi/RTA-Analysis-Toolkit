@@ -312,17 +312,18 @@ export class TypeCurveMatcherComponent implements OnInit, OnDestroy {
   private matchQualitySignal = signal({ rSquared: 0, rmse: 0, mae: 0 });
   private chartConfigSignal = signal<ChartConfig | null>(null);
 
-  ngOnInit(): void {
-    // Update match quality and chart when parameters change
-    effect(() => {
-      this.khValue();
-      this.skinValue();
-      this.areaValue();
-      this.showCalculated();
-      this.showTheoretical();
-      this.updateMatching();
-    });
-  }
+
+  // Angular v21+ requires effect() to be called in the injection context (field initializer)
+  private _autoUpdateEffect = effect(() => {
+    this.khValue();
+    this.skinValue();
+    this.areaValue();
+    this.showCalculated();
+    this.showTheoretical();
+    this.updateMatching();
+  });
+
+  ngOnInit(): void {}
 
   ngOnDestroy(): void {}
 
