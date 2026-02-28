@@ -12,6 +12,7 @@ import {
     createInitialAppLoadingState,
     LoadingState
 } from "../models/loading-state.model";
+import { ImportedDataset, ImportSummary } from "../models/import.model";
 
 /**
  * Centralized application state management
@@ -33,6 +34,7 @@ export class AppStateService {
     private loadingStateSubject = new BehaviorSubject<AppLoadingState>(
         createInitialAppLoadingState()
     );
+    private importSummarySubject = new BehaviorSubject<ImportSummary | null>(null);
 
     // ===== Public Observables =====
     public wellList$: Observable<Well[]> = this.wellListSubject.asObservable();
@@ -41,6 +43,7 @@ export class AppStateService {
     public productionData$: Observable<ProductionData | null> = this.productionDataSubject.asObservable();
     public pressureData$: Observable<PressureData[]> = this.pressureDataSubject.asObservable();
     public loadingState$: Observable<AppLoadingState> = this.loadingStateSubject.asObservable();
+    public importSummary$: Observable<ImportSummary | null> = this.importSummarySubject.asObservable();
 
     constructor (
         @Inject(DATA_PROVIDER) dataProvider: IDataProvider
@@ -256,6 +259,32 @@ export class AppStateService {
         return this.wellListSubject.value;
     }
 
+    // ===== Imported Data =====
+
+    /**
+     * Load data from a user-imported file directly into state,
+     * bypassing the DataProvider abstraction.
+     */
+    public loadImportedData(dataset: ImportedDataset): void {
+        const { well, productionData } = dataset;
+
+        this.wellListSubject.next([well]);
+        this.selectedWellSubject.next(well);
+        this.wellPropertiesSubject.next({ wellId: well.wellId });
+        this.productionDataSubject.next(productionData);
+        this.pressureDataSubject.next([]);
+        this.loadingStateSubject.next(createInitialAppLoadingState());
+
+        const dates = productionData.dates;
+        this.importSummarySubject.next({
+            wellName: well.wellName,
+            sourceFileName: dataset.sourceFileName,
+            importedAt: dataset.importedAt,
+            rowCount: dates.length,
+            dateRange: { start: dates[0], end: dates[dates.length - 1] },
+        });
+    }
+
     // ===== Reset =====
 
     /**
@@ -268,6 +297,7 @@ export class AppStateService {
         this.productionDataSubject.next(null);
         this.pressureDataSubject.next([]);
         this.loadingStateSubject.next(createInitialAppLoadingState());
+        this.importSummarySubject.next(null);
     }
 
 }

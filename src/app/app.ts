@@ -1,14 +1,33 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+
 import { WellSelectorComponent } from './features/well-selector/well-selector.component';
 import { BlasingameComponent } from './features/blasingame/blasingame.component';
 import { DiagnosticPlotsComponent } from './features/diagnostic-plots/diagnostic-plots.component';
+import { DataImportDialogComponent } from './features/data-import/data-import-dialog.component';
+import { DataManagementPanelComponent } from './features/data-import/data-management-panel.component';
+import { AppStateService } from './services/app-state.service';
+import { ImportPersistenceService } from './services/import-persistence.service';
+import { ImportedDataset } from './models/import.model';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, MatTabsModule, WellSelectorComponent, BlasingameComponent, DiagnosticPlotsComponent],
+  imports: [
+    CommonModule,
+    MatTabsModule,
+    MatButtonModule,
+    MatIconModule,
+    MatDialogModule,
+    WellSelectorComponent,
+    BlasingameComponent,
+    DiagnosticPlotsComponent,
+    DataManagementPanelComponent,
+  ],
   template: `
     <div class="app-container">
       <header class="app-header">
@@ -18,7 +37,18 @@ import { DiagnosticPlotsComponent } from './features/diagnostic-plots/diagnostic
 
       <div class="app-content">
         <div class="well-selector-section">
-          <app-well-selector></app-well-selector>
+          <div class="selector-toolbar">
+            <app-well-selector class="selector-control"></app-well-selector>
+            <button mat-flat-button color="primary" (click)="openImportDialog()">
+              <mat-icon>upload_file</mat-icon>
+              Import Data
+            </button>
+          </div>
+
+          <app-data-management-panel
+            (onClear)="onClearData()"
+            (onReplace)="openImportDialog()">
+          </app-data-management-panel>
         </div>
 
         <div class="analysis-section">
@@ -83,6 +113,18 @@ import { DiagnosticPlotsComponent } from './features/diagnostic-plots/diagnostic
       margin-bottom: 20px;
     }
 
+    .selector-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .selector-control {
+      flex: 1;
+      min-width: 200px;
+    }
+
     .analysis-section {
       background: white;
       border-radius: 4px;
@@ -112,5 +154,41 @@ import { DiagnosticPlotsComponent } from './features/diagnostic-plots/diagnostic
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
+  private dialog = inject(MatDialog);
+  private appState = inject(AppStateService);
+  private persistence = inject(ImportPersistenceService);
+
+  ngOnInit(): void {
+    if (this.persistence.has()) {
+      const saved = this.persistence.load();
+      if (saved) {
+        this.appState.loadImportedData(saved);
+        return;
+      }
+    }
+    // No persisted import — load mock data
+    this.appState.initialize();
+  }
+
+  openImportDialog(): void {
+    const ref = this.dialog.open(DataImportDialogComponent, {
+      width: '860px',
+      maxHeight: '90vh',
+      disableClose: false,
+    });
+
+    ref.afterClosed().subscribe((dataset: ImportedDataset | undefined) => {
+      if (dataset) {
+        this.appState.loadImportedData(dataset);
+        this.persistence.save(dataset);
+      }
+    });
+  }
+
+  onClearData(): void {
+    this.persistence.clear();
+    this.appState.reset();
+    this.appState.initialize();
+  }
 }

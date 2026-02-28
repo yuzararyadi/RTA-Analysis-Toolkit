@@ -85,7 +85,8 @@ src/app/
 
 | Feature | Priority | Notes |
 |---|---|---|
-| **Data import (CSV / Excel upload)** | High | No way to load real data yet |
+| **Data import (CSV)** | High | ✅ Step 1.1 done — drag-drop upload, preview table, well metadata form, localStorage persistence |
+| **Data import (Excel upload)** | High | Step 1.2 pending |
 | **HTTP data provider** | High | Skeleton exists, endpoints not wired |
 | **Automatic type curve matching** | High | Manual sliders only; no optimisation algorithm |
 | **Agarwal-Gardner analysis** | High | Not started |
@@ -115,25 +116,26 @@ Each phase below is a self-contained milestone. Complete one phase before moving
 
 **Goal:** Allow users to load real production data into the app.
 
-#### Step 1.1 — CSV File Upload
-- [ ] Create `DataImportService` to parse CSV files
-- [ ] Define expected CSV column schema (date, oil rate, gas rate, water rate, pressure)
-- [ ] Build `DataImportComponent` with drag-and-drop file zone (Angular CDK or Material)
-- [ ] Validate and preview parsed data in a table before confirming import
-- [ ] Map parsed data to existing `ProductionData` model
-- [ ] Feed imported data into `AppStateService` (bypass mock provider)
-- [ ] Show meaningful error messages for malformed files
+#### Step 1.1 — CSV File Upload ✅ Complete
+- [x] Create `DataImportService` to parse CSV files
+- [x] Define expected CSV column schema (date, oil rate, gas rate, water rate, pressure) with flexible aliases
+- [x] Build `DataImportDialogComponent` (MatStepper) with `FileDropZoneComponent` drag-and-drop
+- [x] Validate and preview parsed data in `ImportPreviewTableComponent` before confirming import
+- [x] Full well metadata form (name, API number, field, fluid type, completion type)
+- [x] Map parsed data to existing `ProductionData` model (cumulative via trapezoidal integration)
+- [x] Feed imported data into `AppStateService.loadImportedData()` (bypasses mock provider)
+- [x] Show blocking errors and non-blocking warnings with clear messages
 
 #### Step 1.2 — Excel File Upload
-- [ ] Add `xlsx` or `SheetJS` library
+- [ ] Add `xlsx` (SheetJS) library
 - [ ] Support `.xlsx` and `.xls` formats
 - [ ] Allow user to select which sheet and which columns map to which fields (column mapper UI)
 - [ ] Reuse validation and preview from Step 1.1
 
-#### Step 1.3 — Data Management UI
-- [ ] Display currently loaded dataset (well name, date range, record count)
-- [ ] Allow clearing / replacing a loaded dataset
-- [ ] Store last imported data in browser `localStorage` so it survives page refresh
+#### Step 1.3 — Data Management UI ✅ Complete
+- [x] Display currently loaded dataset (well name, source file, date range, record count) via `DataManagementPanelComponent`
+- [x] Allow clearing (restores mock data) or replacing (re-opens import dialog)
+- [x] Store last imported data in browser `localStorage` via `ImportPersistenceService` (survives page refresh)
 
 ---
 
